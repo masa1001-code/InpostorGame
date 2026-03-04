@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Undercover - Pass & Play</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            touch-action: manipulation;
+        }
+
+        .card-gradient {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid #334155;
+        }
+
+        .btn-primary {
+            background: linear-gradient(to right, #6366f1, #a855f7);
+            transition: transform 0.1s ease;
+        }
+
+        .btn-primary:active {
+            transform: scale(0.95);
+        }
+
+        .thumb-friendly {
+            min-height: 56px;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div id="app" class="w-full max-w-md bg-slate-900 rounded-3xl shadow-2xl overflow-hidden border border-slate-800 flex flex-col h-[90vh]">
+        
+        <!-- Header -->
+        <div class="p-6 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
+            <h1 class="text-xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
+                UNDERCOVER
+            </h1>
+            <button onclick="resetGame()" class="text-xs font-semibold text-slate-400 uppercase tracking-widest hover:text-white transition">Reset</button>
+        </div>
+
+        <!-- Main Content Area -->
+        <div id="game-content" class="flex-grow overflow-y-auto p-6 relative">
+            <!-- Dynamic Content Injected Here -->
+        </div>
+
+    </div>
+
+    <script>
+        // Database Kata yang Diperluas
+        const wordDatabase = [
+            ["Kopi", "Teh"], ["Singa", "Harimau"], ["Sepeda", "Motor"], ["Laptop", "Komputer"],
+            ["Gitar", "Ukulele"], ["Susu", "Santan"], ["Pantai", "Gunung"], ["Dokter", "Perawat"],
+            ["Pizza", "Burger"], ["Bioskop", "Teater"], ["Jeruk", "Lemon"], ["Kucing", "Anjing"],
+            ["Buku", "Majalah"], ["Pena", "Pensil"], ["Kemeja", "Kaos"], ["Sepatu", "Sandal"],
+            ["Pesawat", "Helikopter"], ["Kereta", "Bus"], ["Matahari", "Bulan"], ["Emas", "Perak"],
+            ["Garam", "Gula"], ["Hutan", "Taman"], ["Danau", "Sungai"], ["Kulkas", "Lemari"],
+            ["Bantal", "Guling"], ["Payung", "Jas Hujan"], ["Sabun", "Sampo"], ["Sikat Gigi", "Pasta Gigi"],
+            ["Kamera", "Handphone"], ["Jam Tangan", "Jam Dinding"], ["Madu", "Sirup"], ["Roti", "Biskuit"],
+            ["Soto", "Bakso"], ["Sate", "Rendang"], ["Cokelat", "Permen"], ["Kipas Angin", "AC"],
+            ["Eskalator", "Lift"], ["Dompet", "Tas"], ["Helm", "Topi"], ["Cermin", "Kaca"],
+            ["Berlian", "Permata"], ["Kapal Laut", "Kapal Selam"], ["Lampu", "Lilin"], ["Kunci", "Gembok"],
+            ["Peta", "Kompas"], ["Dasi", "Ikat Pinggang"], ["Kaus Kaki", "Sarung Tangan"], ["Botol", "Gelas"],
+            ["Piring", "Mangkok"], ["Garpu", "Sendok"], ["Meja", "Kursi"], ["Sekolah", "Kampus"]
+        ];
+
+        let players = [];
+        let gameState = 'SETUP'; 
+        let currentPlayerIndex = 0;
+        let gameData = {
+            roles: [],
+            timer: 180,
+            interval: null,
+            firstSpeaker: ""
+        };
+
+        const contentEl = document.getElementById('game-content');
+
+        // --- Renderers ---
+
+        function render() {
+            switch(gameState) {
+                case 'SETUP': renderSetup(); break;
+                case 'READY_TO_VIEW': renderReadyToView(); break;
+                case 'VIEWING': renderViewing(); break;
+                case 'DISCUSSION': renderDiscussion(); break;
+                case 'VOTING': renderVoting(); break;
+                case 'RESULTS': renderResults(); break;
+            }
+        }
+
+        function renderSetup() {
+            contentEl.innerHTML = `
+                <div class="space-y-6 animate-in fade-in duration-500">
+                    <div class="space-y-2">
+                        <label class="text-sm font-semibold text-slate-400">Tambah Pemain (Min 3)</label>
+                        <div class="flex gap-2">
+                            <input id="player-input" type="text" placeholder="Nama..." class="flex-grow bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white">
+                            <button onclick="addPlayer()" class="bg-indigo-600 p-3 rounded-xl font-bold flex items-center justify-center min-w-[56px] shadow-lg">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="player-list" class="space-y-2">
+                        ${players.map((p, i) => `
+                            <div class="flex justify-between items-center bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                                <span class="font-bold text-slate-200">${p}</span>
+                                <button onclick="removePlayer(${i})" class="text-rose-400 font-bold p-1">Hapus</button>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    ${players.length >= 3 ? `
+                        <button onclick="startGame()" class="w-full btn-primary thumb-friendly rounded-2xl font-bold text-lg shadow-xl mt-4">
+                            Mulai Permainan
+                        </button>
+                    ` : `
+                        <div class="text-center p-4 text-slate-500 text-sm italic">Butuh minimal 3 pemain untuk bermain.</div>
+                    `}
+                </div>
+            `;
+            document.getElementById('player-input')?.focus();
+        }
+
+        function renderReadyToView() {
+            const name = players[currentPlayerIndex];
+            contentEl.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full space-y-8 text-center animate-in slide-in-from-bottom-4 duration-300">
+                    <div class="w-24 h-24 bg-indigo-500/20 rounded-full flex items-center justify-center border-4 border-indigo-500/50">
+                        <span class="text-4xl font-bold text-indigo-400">${currentPlayerIndex + 1}</span>
+                    </div>
+                    <div class="space-y-2">
+                        <p class="text-slate-400 font-medium">Oper HP ke:</p>
+                        <h2 class="text-4xl font-black text-white uppercase">${name}</h2>
+                    </div>
+                    <button onclick="revealRole()" class="w-full btn-primary thumb-friendly rounded-2xl font-bold text-lg shadow-xl">
+                        Lihat Peran Saya
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderViewing() {
+            const roleObj = gameData.roles[currentPlayerIndex];
+            contentEl.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full space-y-8 text-center animate-in zoom-in duration-300">
+                    <div class="space-y-4">
+                        <p class="text-slate-400 font-medium italic">Rahasia Anda:</p>
+                        <div class="card-gradient p-10 rounded-3xl shadow-inner border-2 border-slate-700">
+                            <h2 class="text-5xl font-black tracking-tighter text-white">
+                                ${roleObj.word || '???'}
+                            </h2>
+                        </div>
+                        <p class="text-indigo-400 font-bold text-sm tracking-widest uppercase mt-4">
+                            Anda Adalah: ${roleObj.type}
+                        </p>
+                    </div>
+                    
+                    <button onclick="nextPlayer()" class="w-full bg-slate-700 thumb-friendly rounded-2xl font-bold text-lg text-white">
+                        Selesai, Sembunyikan
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderDiscussion() {
+            contentEl.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full space-y-12 text-center animate-in fade-in duration-700">
+                    <div class="space-y-4">
+                        <h2 class="text-2xl font-bold text-slate-300 uppercase tracking-widest">Waktunya Diskusi!</h2>
+                        <div class="text-7xl font-mono font-black text-white tabular-nums drop-shadow-lg">
+                            ${formatTime(gameData.timer)}
+                        </div>
+                    </div>
+
+                    <div class="w-full space-y-4">
+                        <div class="text-sm text-slate-500 font-medium">Urutan Berbicara Pertama:</div>
+                        <div class="p-4 bg-indigo-900/30 border border-indigo-500/30 rounded-2xl text-indigo-300 font-bold text-xl">
+                            ${gameData.firstSpeaker}
+                        </div>
+                    </div>
+
+                    <button onclick="endDiscussionManually()" class="text-rose-400 font-semibold text-sm">
+                        Hentikan Timer & Mulai Voting
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderVoting() {
+            contentEl.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full space-y-8 text-center animate-in zoom-in duration-300">
+                    <div class="space-y-6">
+                        <div class="w-20 h-20 bg-rose-500/20 rounded-full flex items-center justify-center border-4 border-rose-500/50 mx-auto mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        </div>
+                        <h2 class="text-3xl font-black text-white uppercase leading-tight">Waktunya Memilih!</h2>
+                        <p class="text-slate-400 text-lg">Hitung "1, 2, 3" dan tunjuk secara bersamaan siapa yang kalian curigai sebagai <b>Undercover</b>.</p>
+                    </div>
+
+                    <button onclick="showResults()" class="w-full btn-primary thumb-friendly rounded-2xl font-bold text-lg shadow-xl">
+                        Tampilkan Hasil
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderResults() {
+            contentEl.innerHTML = `
+                <div class="space-y-6 animate-in fade-in duration-700 h-full flex flex-col">
+                    <div class="text-center">
+                        <h2 class="text-2xl font-bold text-indigo-400 uppercase tracking-widest">Hasil Peran</h2>
+                        <p class="text-slate-500 text-sm">Cek siapa yang menyamar!</p>
+                    </div>
+
+                    <div class="space-y-3 flex-grow overflow-y-auto pr-1">
+                        ${players.map((p, i) => {
+                            const role = gameData.roles[i];
+                            const isUndercover = role.type === 'Undercover';
+                            return `
+                                <div class="flex justify-between items-center p-4 rounded-2xl border ${isUndercover ? 'bg-rose-500/10 border-rose-500/50' : 'bg-slate-800/50 border-slate-700'}">
+                                    <div>
+                                        <div class="font-bold text-white text-lg">${p}</div>
+                                        <div class="text-xs font-bold uppercase tracking-widest ${isUndercover ? 'text-rose-400' : 'text-slate-500'}">${role.type}</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-xs text-slate-500 uppercase">Kata:</div>
+                                        <div class="font-black text-white">${role.word}</div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+
+                    <button onclick="restartGame()" class="w-full bg-slate-800 thumb-friendly rounded-2xl font-bold text-lg text-white border border-slate-700 mt-4 mb-2">
+                        Main Lagi (Pemain Sama)
+                    </button>
+                    <button onclick="resetGame()" class="w-full text-slate-500 text-sm font-semibold mb-4">
+                        Kembali ke Menu Utama
+                    </button>
+                </div>
+            `;
+        }
+
+        // --- Logic Functions ---
+
+        function addPlayer() {
+            const input = document.getElementById('player-input');
+            const name = input.value.trim();
+            if (name && players.length < 12) {
+                players.push(name);
+                input.value = '';
+                render();
+            }
+        }
+
+        function removePlayer(index) {
+            players.splice(index, 1);
+            render();
+        }
+
+        function startGame() {
+            const pair = wordDatabase[Math.floor(Math.random() * wordDatabase.length)];
+            const isReverse = Math.random() > 0.5;
+            const citizenWord = isReverse ? pair[0] : pair[1];
+            const undercoverWord = isReverse ? pair[1] : pair[0];
+
+            let roles = players.map(() => ({ type: 'Warga Sipil', word: citizenWord }));
+            const ucIndex = Math.floor(Math.random() * players.length);
+            roles[ucIndex] = { type: 'Undercover', word: undercoverWord };
+
+            gameData.roles = roles;
+            gameData.firstSpeaker = players[Math.floor(Math.random() * players.length)];
+            currentPlayerIndex = 0;
+            gameState = 'READY_TO_VIEW';
+            render();
+        }
+
+        function revealRole() {
+            gameState = 'VIEWING';
+            render();
+        }
+
+        function nextPlayer() {
+            if (currentPlayerIndex < players.length - 1) {
+                currentPlayerIndex++;
+                gameState = 'READY_TO_VIEW';
+            } else {
+                gameState = 'DISCUSSION';
+                startTimer();
+            }
+            render();
+        }
+
+        function startTimer() {
+            gameData.timer = 180;
+            gameData.interval = setInterval(() => {
+                gameData.timer--;
+                if (gameData.timer <= 0) {
+                    clearInterval(gameData.interval);
+                    gameState = 'VOTING';
+                }
+                render();
+            }, 1000);
+        }
+
+        function endDiscussionManually() {
+            clearInterval(gameData.interval);
+            gameState = 'VOTING';
+            render();
+        }
+
+        function showResults() {
+            gameState = 'RESULTS';
+            render();
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function restartGame() {
+            clearInterval(gameData.interval);
+            startGame();
+        }
+
+        function resetGame() {
+            clearInterval(gameData.interval);
+            players = [];
+            gameState = 'SETUP';
+            render();
+        }
+
+        window.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && gameState === 'SETUP') {
+                addPlayer();
+            }
+        });
+
+        render();
+    </script>
+</body>
+</html>
+
